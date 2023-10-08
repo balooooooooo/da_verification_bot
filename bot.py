@@ -8,6 +8,11 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import requests
 from keep_alive import keep_alive
+from mailjet_rest import Client
+import json
+
+with open("config.json") as f:
+    CONFIG = json.load(f)
 
 conn = sqlite3.connect('bot.db')
 c = conn.cursor()
@@ -172,17 +177,28 @@ async def on_message(message):
                 for i in verif_list:
                     insert_code(random_code, message.author.id, i)
                     insert_email(message_content, message.author.id, i)
-                emailmessage = Mail(
-                    from_email=os.environ.get('SENDGRID_EMAIL'),
-                    to_emails=message_content,
-                    subject='Verify your server email',
-                    html_content=str(random_code))
+                data = {
+                    'Messages': [
+                        {
+                            "From": {
+                                "Email": CONFIG["email"],
+                                "Name": "Me"
+                            },
+                            "To": [
+                                {
+                                    "Email": message_content,
+                                    "Name": "You"
+                                }
+                            ],
+                            "Subject": "Ověř svůj účet na DA serveru",
+                            "TextPart": str(random_code)
+                        }
+                    ]
+                }
                 try:
-                    sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
-                    response = sg.send(emailmessage)
-                    print(response.status_code)
-                    print(response.body)
-                    print(response.headers)
+                    mailjet = Client(auth=(CONFIG["mail_public_key"], CONFIG["mail_private_key"]), version='v3.1')
+                    result = mailjet.send.create(data=data)
+                    print(result.status_code)
                     await message.channel.send("Email sent. **Reply here with your verification code**. If you haven't received it, check your spam folder.")
                 except Exception as e:
                     mailgun_email = mailgun_send(message_content, random_code)
@@ -338,4 +354,4 @@ async def verify(ctx):
             await ctx.author.send(verify_msg(ctx.guild, check_on_join[1]))
 
 keep_alive()
-client.run(os.environ.get('DISCORD_TOKEN'))
+client.run(CONFIG["discord_token"])
